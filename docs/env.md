@@ -52,9 +52,11 @@ az role assignment create \
 Create a Redis instance:
 
 ```bash
+redisname=hijack-demo-redis-$(date +%s)
+
 az redis create -g hijack-demo-rg \
   --location westeurope \
-  --name hijack-demo-redis \
+  --name $redisname \
   --sku Basic \
   --vm-size c0 \
   --enable-non-ssl-port
@@ -63,18 +65,18 @@ az redis create -g hijack-demo-rg \
 Define firewall rules:
 
 ```bash
-aksOutboundId=$(az aks show -g hijack-demo-rg -n hijack-demo-aks --query 'networkProfile.loadBalancerProfile.effectiveOutboundIPs[].{id:id}' -otsv)
+aksOutboundId=$(az aks show -g hijack-demo-rg -n hijack-demo-aks --query 'networkProfile.loadBalancerProfile.effectiveOutboundIps[].{id:id}' -otsv)
 
 aksOutboundIp=$(az network public-ip show --ids $aksOutboundId --query ipAddress -otsv)
 
 az redis firewall-rules create -g hijack-demo-rg \
-  --name hijack-demo-redis \
+  --name $redisname \
   --rule-name aks0access \
   --start-ip $aksOutboundIp \
   --end-ip $aksOutboundIp
 
 az redis firewall-rules create -g hijack-demo-rg \
-  --name hijack-demo-redis \
+  --name $redisname \
   --rule-name client0access \
   --start-ip $ip \
   --end-ip $ip
@@ -83,8 +85,8 @@ az redis firewall-rules create -g hijack-demo-rg \
 Add data:
 
 ```bash
-RedisKey=$(az redis list-keys -g hijack-demo-rg --name hijack-demo-redis --query primaryKey -otsv)
-RedisHost=$(az redis show -g hijack-demo-rg --name hijack-demo-redis --query hostName -otsv)
+RedisKey=$(az redis list-keys -g hijack-demo-rg --name $redisname --query primaryKey -otsv)
+RedisHost=$(az redis show -g hijack-demo-rg --name $redisname --query hostName -otsv)
 
 redis-cli -h $RedisHost -a $RedisKey set data "some secret data"
 ```
@@ -107,12 +109,14 @@ az vm open-port --port 80,443,1389 --resource-group hijack-demo-rg --name hijack
 
 attackIp=$(az vm show -d -g hijack-demo-rg -n hijack-attack-vm --query publicIps -o tsv)
 
-ssh azureuser@$attackIp 'curl -s https://raw.githubusercontent.com/nmeisenzahl/hijack-kubernetes/assets/configure-vm.sh | bash'
+ssh azureuser@$attackIp 'curl -s https://raw.githubusercontent.com/nmeisenzahl/hijack-kubernetes/main/assets/configure-vm.sh | bash'
 ```
 
-You now need to download Orca Java and install it on the attacker host. To do so you will have to visit [this](https://www.oracle.com/java/technologies/javase/javase8-archive-downloads.html) URL and download the JDK version "8u201" onto your local machine. Then execute the following commands to configure the attacker machine:
+You now need to download Oracle Java and install it on the attacker host. To do so you will have to visit [this](https://www.oracle.com/java/technologies/javase/javase8-archive-downloads.html) URL and download the JDK version "8u201" onto your local machine. Then execute the following commands to configure the attacker machine:
 
 ```bash
+
+# ssh azureuser@$attackIp 'cd log4j-shell-poc/; wget https://archive.org/download/jdk-8u201/jdk-8u201-linux-x64.tar.gz'
 scp jdk-8u201-linux-x64.tar.gz azureuser@$attackIp:/home/azureuser/log4j-shell-poc/
 
 ssh azureuser@$attackIp 'tar -xvf /home/azureuser/log4j-shell-poc/jdk-8u201-linux-x64.tar.gz --directory ./log4j-shell-poc'
@@ -149,7 +153,7 @@ The below steps are only needed when your source IP had changed.
 ip=$(curl -s checkip.amazonaws.com)
 
 az redis firewall-rules create -g hijack-demo-rg \
-  --name hijack-demo-redis \
+  --name $redisname \
   --rule-name client0access0$RANDOM \
   --start-ip $ip \
   --end-ip $ip
